@@ -21,6 +21,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	balt "github.com/jeremmfr/go-utils/basicalter"
 )
 
@@ -79,6 +80,7 @@ func (rsc *application) Schema(
 ) {
 	resp.Schema = schema.Schema{
 		Description: "Provides a " + rsc.junosName() + ".",
+		Version:     1,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -295,6 +297,220 @@ func (rsc *application) Schema(
 			},
 		},
 	}
+}
+
+func (r *application) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	return map[int64]resource.StateUpgrader{
+		// State upgrade implementation from 0 (prior state version) to 2 (Schema.Version)
+		0: {
+			PriorSchema: &schema.Schema{
+				Attributes: map[string]schema.Attribute{
+					"name": schema.StringAttribute{
+						Required: true,
+					},
+					"id": schema.StringAttribute{
+						Computed: true,
+					},
+					"application_protocol": schema.StringAttribute{
+						Optional: true,
+					},
+					"description": schema.StringAttribute{
+						Optional: true,
+					},
+					"destination_port": schema.StringAttribute{
+						Optional: true,
+					},
+					"ether_type": schema.StringAttribute{
+						Optional: true,
+					},
+					"inactivity_timeout": schema.Int64Attribute{
+						Optional: true,
+					},
+					"inactivity_timeout_never": schema.BoolAttribute{
+						Optional: true,
+					},
+					"protocol": schema.StringAttribute{
+						Optional: true,
+					},
+					"rpc_program_number": schema.StringAttribute{
+						Optional: true,
+					},
+					"source_port": schema.StringAttribute{
+						Optional: true,
+					},
+					"uuid": schema.StringAttribute{
+						Optional: true,
+					},
+				},
+				Blocks: map[string]schema.Block{
+					"term": schema.ListNestedBlock{
+						Description: "For each name of term to declare.",
+						NestedObject: schema.NestedBlockObject{
+							Attributes: map[string]schema.Attribute{
+								"name": schema.StringAttribute{
+									Required:    true,
+									Description: "Term name.",
+									Validators: []validator.String{
+										stringvalidator.LengthBetween(1, 63),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"protocol": schema.StringAttribute{
+									Required:    true,
+									Description: "Match IP protocol type.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"alg": schema.StringAttribute{
+									Optional:    true,
+									Description: "Application Layer Gateway.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"destination_port": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match TCP/UDP destination port.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringDoubleQuoteExclusion(),
+									},
+								},
+								"icmp_code": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match ICMP message code.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"icmp_type": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match ICMP message type.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"icmp6_code": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match ICMP6 message code.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"icmp6_type": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match ICMP6 message type.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringFormat(tfvalidator.DefaultFormat),
+									},
+								},
+								"inactivity_timeout": schema.Int64Attribute{
+									Optional:    true,
+									Description: "Application-specific inactivity timeout.",
+									Validators: []validator.Int64{
+										int64validator.Between(4, 86400),
+									},
+								},
+								"inactivity_timeout_never": schema.BoolAttribute{
+									Optional:    true,
+									Description: "Disables inactivity timeout.",
+									Validators: []validator.Bool{
+										tfvalidator.BoolTrue(),
+									},
+								},
+								"rpc_program_number": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match range of RPC program numbers.",
+									Validators: []validator.String{
+										stringvalidator.RegexMatches(regexp.MustCompile(`^\d+(-\d+)?$`),
+											"must be an integer or a range of integers"),
+									},
+								},
+								"source_port": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match TCP/UDP source port.",
+									Validators: []validator.String{
+										stringvalidator.LengthAtLeast(1),
+										tfvalidator.StringDoubleQuoteExclusion(),
+									},
+								},
+								"uuid": schema.StringAttribute{
+									Optional:    true,
+									Description: "Match universal unique identifier for DCE RPC objects.",
+									Validators: []validator.String{
+										stringvalidator.RegexMatches(regexp.MustCompile(
+											`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`),
+											"must be of the form xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+										),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			StateUpgrader: func(
+				ctx context.Context,
+				req resource.UpgradeStateRequest,
+				resp *resource.UpgradeStateResponse,
+			) {
+				var priorStateData applicationDataV0
+				resp.Diagnostics.Append(req.State.Get(ctx, &priorStateData)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				// Change previous unset values to null.
+				if !priorStateData.InactivityTimeoutNever.ValueBool() {
+					priorStateData.InactivityTimeoutNever = basetypes.NewBoolNull()
+				}
+
+				if priorStateData.InactivityTimeout.ValueInt64() == 0 {
+					priorStateData.InactivityTimeout = basetypes.NewInt64Null()
+				}
+
+				upgradedStateData := applicationData{
+					ID:                     priorStateData.ID,
+					InactivityTimeoutNever: priorStateData.InactivityTimeoutNever,
+					Name:                   priorStateData.Name,
+					ApplicationProtocol:    priorStateData.ApplicationProtocol,
+					Description:            priorStateData.Description,
+					DestinationPort:        priorStateData.DestinationPort,
+					EtherType:              priorStateData.EtherType,
+					InactivityTimeout:      priorStateData.InactivityTimeout,
+					Protocol:               priorStateData.Protocol,
+					RPCProgramNumber:       priorStateData.RpcProgramNumber,
+					SourcePort:             priorStateData.SourcePort,
+					UUID:                   priorStateData.Uuid,
+					Term:                   priorStateData.Term,
+				}
+				resp.Diagnostics.Append(resp.State.Set(ctx, upgradedStateData)...)
+			},
+		},
+	}
+}
+
+type applicationDataV0 struct {
+	InactivityTimeoutNever types.Bool             `tfsdk:"inactivity_timeout_never"`
+	ID                     types.String           `tfsdk:"id"`
+	InactivityTimeout      types.Int64            `tfsdk:"inactivity_timeout"`
+	Name                   types.String           `tfsdk:"name"`
+	ApplicationProtocol    types.String           `tfsdk:"application_protocol"`
+	Description            types.String           `tfsdk:"description"`
+	DestinationPort        types.String           `tfsdk:"destination_port"`
+	EtherType              types.String           `tfsdk:"ether_type"`
+	Protocol               types.String           `tfsdk:"protocol"`
+	RpcProgramNumber       types.String           `tfsdk:"rpc_program_number"`
+	SourcePort             types.String           `tfsdk:"source_port"`
+	Uuid                   types.String           `tfsdk:"uuid"`
+	Term                   []applicationBlockTerm `tfsdk:"term"`
 }
 
 type applicationData struct {
